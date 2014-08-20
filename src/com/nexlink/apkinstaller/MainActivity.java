@@ -1,54 +1,70 @@
 package com.nexlink.apkinstaller;
 
-import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.List;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 import android.app.Activity;
+import android.app.AlarmManager;
 import android.app.AlertDialog;
+import android.app.PendingIntent;
 import android.app.ProgressDialog;
+import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
-import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.net.Uri;
 import android.os.AsyncTask;
-import android.os.Build;
 import android.os.Bundle;
+import android.view.View;
+import android.view.View.OnClickListener;
+import android.widget.Button;
 import android.widget.ListView;
+
+import com.nexlink.utilites.InstallUtils;
+import com.nexlink.utilites.Shell;
 
 public class MainActivity extends Activity {
     
     private static final ArrayList<InstallItem> installs = new ArrayList<InstallItem>();
     public static final boolean haveRoot = Shell.su();
     
+    private static InstallUtils mInstaller;
     
-    private static ListAdapter listAdapter;
-    private static ListView listView;
+    private static ListAdapter mListAdapter;
+    private static ListView mListView;
     private static ProgressDialog mProgress;
     private static AlertDialog mAlert;
+	private Button mButton;
     
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         
-        listView = (ListView) findViewById(R.id.list);
+        mInstaller = new InstallUtils(this);
+        
+        mListView = (ListView) findViewById(R.id.list);
+        mButton = (Button) findViewById(R.id.button);
+        mButton.setOnClickListener(new OnClickListener(){
+			@Override
+			public void onClick(View arg0) {
+				mButton.setEnabled(false);
+				doNextInstall();
+			}
+        });
         mProgress = new ProgressDialog(this);
         mAlert = new AlertDialog.Builder(this).show();
         mAlert.dismiss();
         
-        if(listAdapter == null){
+        if(mListAdapter == null){
             mProgress = ProgressDialog.show(this, "", "Extracting temp files...", false);
             new AsyncTask<Void,Void,Void>(){
                 @Override
@@ -58,11 +74,11 @@ public class MainActivity extends Activity {
                 @Override
                 protected Void doInBackground(Void... params) {
                     PackageManager packageManager = getPackageManager();
-                    InputStream fin = null;
-                    FileOutputStream fout = null;
+                    ZipInputStream zis = null;
+                    FileOutputStream fos = null;
                     try {
                         byte[] buffer = new byte[64*1024];
-                        ZipInputStream zis = new ZipInputStream(MainActivity.this.getResources().openRawResource(R.raw.apks));
+                        zis = new ZipInputStream(MainActivity.this.getResources().openRawResource(R.raw.apks));
                         ZipEntry ze;
                         while((ze = zis.getNextEntry()) != null){
                             if(ze.isDirectory()){
@@ -71,23 +87,19 @@ public class MainActivity extends Activity {
                             InstallItem inst = new InstallItem();
                             String[] fileName = ze.getName().split("/");
                             inst.system = fileName[0].equals("system") ? true : false;
-                            fout = openFileOutput(fileName[1], MODE_WORLD_READABLE);
+                            fos = openFileOutput(fileName[1], MODE_WORLD_READABLE);
                             int chunk = 0;
                             while ((chunk = zis.read(buffer)) != -1) {
-                                fout.write(buffer, 0, chunk);
+                                fos.write(buffer, 0, chunk);
                             }
                             inst.apkFile = getFileStreamPath(fileName[1]);
                             inst.apkFile.setReadable(true, false);
                             inst.apkFile.setWritable(true, false);
                             inst.apkFile.setExecutable(true, false);
-                            String path = inst.apkFile.getAbsolutePath();
-                            PackageInfo packageInfo = packageManager.getPackageArchiveInfo(path, 0);
+                            PackageInfo packageInfo = mInstaller.getPackageInfoFromFile(inst.apkFile);
                             if(packageInfo != null){
-                                ApplicationInfo applicationInfo = packageInfo.applicationInfo;
-                                applicationInfo.sourceDir = path;
-                                applicationInfo.publicSourceDir = path;
-                                inst.text = (String) applicationInfo.loadLabel(packageManager) + " " + packageInfo.versionName;
-                                inst.icon = applicationInfo.loadIcon(packageManager);
+                                inst.text = (String) packageInfo.applicationInfo.loadLabel(packageManager) + " " + packageInfo.versionName;
+                                inst.icon = packageInfo.applicationInfo.loadIcon(packageManager);
                             }
                             installs.add(inst);
                         }
@@ -97,14 +109,14 @@ public class MainActivity extends Activity {
                     }
                     
                     finally{
-                        if(fout != null){
+                        if(fos != null){
                             try {
-                                fout.close();
+                                fos.close();
                             } catch (IOException e) {}
                         }
-                        if(fin != null){
+                        if(zis != null){
                             try {
-                                fin.close();
+                                zis.close();
                             } catch (IOException e) {}
                         }
                         
@@ -120,9 +132,9 @@ public class MainActivity extends Activity {
                 }
                 @Override
                 protected void onPostExecute(Void v){
-                    listAdapter = new ListAdapter(MainActivity.this, R.layout.list_item);
-                    listAdapter.addAll(installs);
-                    listView.setAdapter(listAdapter);
+                    mListAdapter = new ListAdapter(MainActivity.this, R.layout.list_item);
+                    mListAdapter.addAll(installs);
+                    mListView.setAdapter(mListAdapter);
                     mProgress.dismiss();
                     lockOrientation(false);
                     startInstallProcess();
@@ -130,47 +142,9 @@ public class MainActivity extends Activity {
             }.execute();
         }
         else{
-            listView.setAdapter(listAdapter);
+            mListView.setAdapter(mListAdapter);
         }
     }
-    
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data){
-        super.onActivityResult(requestCode, resultCode, data);
-        listAdapter.notifyDataSetChanged();
-        mAlert = new AlertDialog.Builder(this)
-        .setMessage("Click OK to continue.")
-        .setIcon(android.R.drawable.ic_dialog_alert)
-        .setCancelable(false)
-        .setPositiveButton(android.R.string.ok, new DialogInterface.OnClickListener() {
-            public void onClick(DialogInterface dialog, int whichButton) {
-                InstallItem installItem = null;
-                for(InstallItem ii : installs){
-                    if(ii.pending){
-                        installItem = ii;
-                        break;
-                    }
-                }
-                if(installItem != null){
-                    PackageInfo packageInfo = getPackageManager().getPackageArchiveInfo(Uri.fromFile(installItem.apkFile).getPath(), 0);
-                    if(packageInfo != null){
-                        packageInfo.applicationInfo.sourceDir = installItem.apkFile.getAbsolutePath();
-                        packageInfo.applicationInfo.publicSourceDir = installItem.apkFile.getAbsolutePath();
-                        List<PackageInfo> pkglist = getPackageManager().getInstalledPackages(0);
-                        for(PackageInfo pi : pkglist){
-                            if(packageInfo.packageName.compareTo(pi.packageName) == 0 && packageInfo.versionCode == pi.versionCode){
-                                installItem.installed = true;
-                                break;
-                            }
-                        }
-                    }
-                    installItem.pending = false;
-                    installItem.apkFile.delete();
-                    listAdapter.notifyDataSetChanged();
-                    doNextInstall();
-                }}})
-                .setNegativeButton(android.R.string.cancel, null).show();
-            }
             
             private void lockOrientation(boolean lock){
                 if(lock){
@@ -190,15 +164,9 @@ public class MainActivity extends Activity {
             private void startInstallProcess(){
                 String msg = haveRoot ? "Device is rooted; packages can be installed automatically." : "Device is not rooted; packages will need to be confirmed manually.";
                 mAlert = new AlertDialog.Builder(MainActivity.this)
-                .setMessage(msg + " Click OK to continue.")
+                .setMessage(msg + " Click Start to begin installation.")
                 .setCancelable(false)
-                .setPositiveButton(android.R.string.ok, new DialogInterface.OnClickListener() {
-                    @Override
-                    public void onClick(DialogInterface dialog, int which) {
-                        mProgress = ProgressDialog.show(MainActivity.this, "", "Please wait...");
-                        doNextInstall();
-                    }
-                }).show();
+                .setPositiveButton("OK", null).show();
             }
             
             private void doNextInstall(){
@@ -214,13 +182,30 @@ public class MainActivity extends Activity {
                     finishInstallProcess();
                     return;
                 }
-                final InstallItem installItem = temp;
                 
+                final InstallItem installItem = temp;
                 if(!haveRoot){
-                    System.out.println(installItem.installed);
-                    Intent intent = new Intent(Intent.ACTION_VIEW).setDataAndType(Uri.fromFile(installItem.apkFile), "application/vnd.android.package-archive");
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                    startActivityForResult(intent, 0);
+                    mInstaller.installNormal(installItem.apkFile);
+                    mAlert = new AlertDialog.Builder(this)
+                    .setMessage("Click OK to continue.")
+                    .setIcon(android.R.drawable.ic_dialog_alert)
+                    .setCancelable(false)
+                    .setPositiveButton(android.R.string.ok, new DialogInterface.OnClickListener() {
+                        public void onClick(DialogInterface dialog, int whichButton) {
+                            InstallItem installItem = null;
+                            for(InstallItem temp : installs){
+                                if(temp.pending){
+                                    installItem = temp;
+                                    break;
+                                }
+                            }
+                            if(installItem != null){
+                                installItem.installed = mInstaller.isInstalled(installItem.apkFile);
+                                installItem.pending = false;
+                                installItem.apkFile.delete();
+                                mListAdapter.notifyDataSetChanged();
+                                doNextInstall();
+                            }}}).show();
                 }
                 else{
                     mProgress.setMessage("Installing "+installItem.text+" ("+(installs.indexOf(installItem)+1)+"/"+installs.size()+")");
@@ -233,31 +218,7 @@ public class MainActivity extends Activity {
                         @Override
                         protected Void doInBackground(Void... params) {
                             try{
-                                PackageInfo packageInfo = getPackageManager().getPackageArchiveInfo(Uri.fromFile(installItem.apkFile).getPath(), 0);
-                                packageInfo.applicationInfo.sourceDir = installItem.apkFile.getAbsolutePath();
-                                packageInfo.applicationInfo.publicSourceDir = installItem.apkFile.getAbsolutePath();
-                                if(!installItem.system){
-                                    Shell.sudo("pm install -r -d -t " + installItem.apkFile.getAbsolutePath());
-                                    List<PackageInfo> pkglist = getPackageManager().getInstalledPackages(0);
-                                    for(PackageInfo pi : pkglist){
-                                        if(packageInfo.packageName.compareTo(pi.packageName) == 0 && packageInfo.versionCode == pi.versionCode){
-                                            installItem.installed = true;
-                                        }
-                                    }
-                                }
-                                else{
-                                    String copypath = (Build.VERSION.SDK_INT < Build.VERSION_CODES.KITKAT ? "/system/app/" : "/system/priv-app/") + packageInfo.packageName + ".apk";
-                                    Shell.sudo(
-                                    "mount -o rw,remount /system"
-                                    + ";cp " + installItem.apkFile.getAbsolutePath() + " " + copypath
-                                    + ";chmod 644 " + copypath
-                                    + ";chown 0.0 " + copypath
-                                    + ";mount -o ro,remount /system"
-                                    + ";sync"
-                                    );
-                                    File copied = new File(copypath);
-                                    installItem.installed = copied.exists() && copied.isFile();
-                                }
+                                installItem.installed = mInstaller.installRoot(installItem.apkFile, installItem.system);
                             }
                             catch(Exception e){installItem.installed = false;}
                             finally{installItem.apkFile.delete();}
@@ -266,7 +227,7 @@ public class MainActivity extends Activity {
                         @Override
                         protected void onPostExecute(Void v){
                             installItem.pending = false;
-                            listAdapter.notifyDataSetChanged();
+                            mListAdapter.notifyDataSetChanged();
                             doNextInstall();
                             lockOrientation(false);
                         }
@@ -275,16 +236,16 @@ public class MainActivity extends Activity {
             }
             
             private void finishInstallProcess(){
-                String msg = "All packages were successfully installed.";
+                boolean success = true;
                 for(InstallItem installItem : installs){
                     if(!installItem.installed){
-                        msg = "Some packages were not installed.";
+                        success = false;;
                         break;
                     }
                 }
                 AlertDialog.Builder alertDialogBuilder = new AlertDialog.Builder(this);
-                alertDialogBuilder.setMessage(msg + " Click OK to finish.")
-                .setPositiveButton(android.R.string.ok, new DialogInterface.OnClickListener(){
+                alertDialogBuilder.setMessage(success ? "All packages were successfully installed." : "Some packages were not installed.")
+                .setPositiveButton("Finish", new DialogInterface.OnClickListener(){
                     @Override
                     public void onClick(DialogInterface dialog, int which) {
                         Intent intent = new Intent(Intent.ACTION_DELETE, Uri.fromParts("package", getPackageName(), null));
@@ -294,7 +255,22 @@ public class MainActivity extends Activity {
                         System.gc();
                         System.exit(0);
                     }
-                }).show();
+                });
+                
+                if(!success){
+                	alertDialogBuilder.setNegativeButton("Retry", new DialogInterface.OnClickListener(){
+						@Override
+						public void onClick(DialogInterface dialog, int which) {
+							Context context = MainActivity.this;
+							Intent mStartActivity = new Intent(context, MainActivity.class);
+							PendingIntent mPendingIntent = PendingIntent.getActivity(context, 0, mStartActivity, PendingIntent.FLAG_CANCEL_CURRENT);
+							AlarmManager mgr = (AlarmManager)context.getSystemService(Context.ALARM_SERVICE);
+							mgr.set(AlarmManager.RTC, System.currentTimeMillis() + 100, mPendingIntent);
+							System.exit(0);
+						}		
+                	});
+                }
+                alertDialogBuilder.show();
             }
         }
         
