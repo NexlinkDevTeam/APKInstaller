@@ -185,7 +185,7 @@ public class MainActivity extends Activity {
                 
                 final InstallItem installItem = temp;
                 if(!haveRoot){
-                    mInstaller.installNormal(installItem.apkFile);
+                    mInstaller.installIntent(installItem.apkFile);
                     mAlert = new AlertDialog.Builder(this)
                     .setMessage("Click OK to continue.")
                     .setIcon(android.R.drawable.ic_dialog_alert)
