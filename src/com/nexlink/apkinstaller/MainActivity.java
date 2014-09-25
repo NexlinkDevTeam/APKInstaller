@@ -98,7 +98,7 @@ public class MainActivity extends Activity {
                             inst.apkFile.setExecutable(true, false);
                             PackageInfo packageInfo = mInstaller.getPackageInfoFromFile(inst.apkFile);
                             if(packageInfo != null){
-                                inst.text = (String) packageInfo.applicationInfo.loadLabel(packageManager) + " " + packageInfo.versionName;
+                                inst.text = (String) packageInfo.applicationInfo.loadLabel(packageManager) + " " + (packageInfo.versionName != null ? packageInfo.versionName : "");
                                 inst.icon = packageInfo.applicationInfo.loadIcon(packageManager);
                             }
                             installs.add(inst);
