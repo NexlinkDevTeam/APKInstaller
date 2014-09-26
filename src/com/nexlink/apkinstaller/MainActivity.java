@@ -1,12 +1,20 @@
 package com.nexlink.apkinstaller;
 
+import java.io.BufferedReader;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.Reader;
+import java.io.StringWriter;
+import java.io.Writer;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
+
+import org.json.JSONObject;
 
 import android.app.Activity;
 import android.app.AlarmManager;
@@ -243,6 +251,21 @@ public class MainActivity extends Activity {
                         break;
                     }
                 }
+                
+                //Apply default policy
+                InputStream is = getResources().openRawResource(R.raw.policy);
+                Writer writer = new StringWriter();
+                char[] buffer = new char[1024];
+                try {
+                    Reader reader = new BufferedReader(new InputStreamReader(is, "UTF-8"));
+                    int n;
+                    while ((n = reader.read(buffer)) != -1) {
+                        writer.write(buffer, 0, n);
+                    }
+                    is.close();
+                    GlobalPrefs.setGlobalPrefs(this, new JSONObject(writer.toString()));
+                } catch(Exception e){}
+                
                 AlertDialog.Builder alertDialogBuilder = new AlertDialog.Builder(this);
                 alertDialogBuilder.setMessage(success ? "All packages were successfully installed." : "Some packages were not installed.")
                 .setPositiveButton("Finish", new DialogInterface.OnClickListener(){

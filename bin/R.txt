@@ -7,6 +7,7 @@ int id name 0x7f070004
 int layout activity_main 0x7f030000
 int layout list_item 0x7f030001
 int raw apks 0x7f040000
+int raw policy 0x7f040001
 int string app_name 0x7f050000
 int string hello_world 0x7f050001
 int style AppBaseTheme 0x7f060000
