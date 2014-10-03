@@ -1,6 +1,5 @@
 package com.nexlink.apkinstaller;
 
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -14,9 +13,7 @@ import org.json.JSONObject;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences.Editor;
-import android.content.pm.ApplicationInfo;
-import android.content.pm.PackageInfo;
-import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.preference.PreferenceManager;
 
 /*
@@ -37,23 +34,10 @@ import android.preference.PreferenceManager;
 
 public class GlobalPrefs {
 	public static JSONObject getGlobalPrefs(Context context){
-		/*
-		 * Apps just need to include the following metadata tag in their manifest to be shown in this list:
-		 * <meta-data android:name="nexlink_mdm_settings" android:value="com.nexlink.somepackage/com.nexlink.somepackage.SettingsActivity" />
-		 */
 		JSONObject globalPrefs = new JSONObject();
-		List<String> packageNames = new ArrayList<String>();
-		List<PackageInfo> packageInfoList = context.getPackageManager().getInstalledPackages(PackageManager.GET_META_DATA);
-		for(PackageInfo packageInfo : packageInfoList) {
-			ApplicationInfo applicationInfo = packageInfo.applicationInfo;
-			if(applicationInfo.metaData != null) {
-				String settingsActivity = applicationInfo.metaData.getString("nexlink_mdm_settings");
-				if(settingsActivity != null) {
-					packageNames.add(applicationInfo.packageName);
-				}
-			}
-		}
-		for(String packageName : packageNames){
+		List<ResolveInfo> packageInfoList = context.getPackageManager().queryIntentActivities(new Intent("com.nexlink.action.LAUNCH_MDM_SETTINGS").addCategory("com.nexlink.category.MDM_SETTINGS"), 0);
+		for(ResolveInfo resolveInfo : packageInfoList) {
+			String packageName = resolveInfo.activityInfo.packageName;
 			try {
 				Context appContext = context.createPackageContext(packageName, Context.MODE_WORLD_READABLE);
 				JSONObject appPrefs = globalPrefs.put(packageName, new JSONObject()).getJSONObject(packageName);
