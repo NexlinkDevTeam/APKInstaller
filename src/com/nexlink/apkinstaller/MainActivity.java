@@ -38,6 +38,7 @@ import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.View;
 import android.view.View.OnClickListener;
 import android.widget.Button;
@@ -237,7 +238,10 @@ public class MainActivity extends Activity {
                             try{
                                 installItem.installed = mInstaller.installRoot(installItem.apkFile, installItem.system);
                             }
-                            catch(Exception e){installItem.installed = false;}
+                            catch(Exception e){
+                            	Log.e("ROOT INSTALL FAILED", e.getMessage());
+                                installItem.installed = false;
+                            }
                             finally{installItem.apkFile.delete();}
                             return null;
                         }
