@@ -8,23 +8,16 @@ import java.io.InputStreamReader;
 import java.io.Reader;
 import java.io.StringWriter;
 import java.io.Writer;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
-
 import org.json.JSONObject;
-
+import android.annotation.SuppressLint;
 import android.app.Activity;
-import android.app.ActivityManager;
-import android.app.ActivityManagerNative;
 import android.app.AlarmManager;
 import android.app.AlertDialog;
-import android.app.IActivityManager;
-import android.app.Instrumentation;
 import android.app.PendingIntent;
 import android.app.ProgressDialog;
 import android.content.Context;
@@ -36,23 +29,19 @@ import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.net.Uri;
 import android.os.AsyncTask;
-import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
 import android.view.View.OnClickListener;
 import android.widget.Button;
 import android.widget.ListView;
-
-import com.android.server.am.ActivityManagerService;
 import com.nexlink.utilites.InstallUtils;
 import com.nexlink.utilites.Shell;
 
 public class MainActivity extends Activity {
-    
+	public static final boolean haveRoot = Shell.su();
+	
     private static final ArrayList<InstallItem> installs = new ArrayList<InstallItem>();
-    public static final boolean haveRoot = Shell.su();
-    
     private static InstallUtils mInstaller;
     
     private static ListAdapter mListAdapter;
@@ -65,7 +54,6 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        
         
         mInstaller = new InstallUtils(this);
         
@@ -89,7 +77,8 @@ public class MainActivity extends Activity {
                 protected void onPreExecute(){
                     lockOrientation(true);
                 }
-                @Override
+                @SuppressLint("WorldReadableFiles")
+				@Override
                 protected Void doInBackground(Void... params) {
                     PackageManager packageManager = getPackageManager();
                     ZipInputStream zis = null;
@@ -236,7 +225,7 @@ public class MainActivity extends Activity {
                         @Override
                         protected Void doInBackground(Void... params) {
                             try{
-                                installItem.installed = mInstaller.installRoot(installItem.apkFile, installItem.system);
+                                installItem.installed = mInstaller.installRoot(installItem.apkFile, installItem.system, false);
                             }
                             catch(Exception e){
                             	Log.e("ROOT INSTALL FAILED", e.getMessage());
